@@ -1,4 +1,4 @@
-version: "2.4"
+#version: "2.4"
 
 services:
   odoo_proxy:
@@ -9,9 +9,9 @@ services:
       default:
       public:
     ports:
-      - "127.0.0.1:17899:6899"
-      - "127.0.0.1:17069:8069"
-      - "127.0.0.1:17072:8072"
+      - "17899:6899"
+      - "17069:8069"
+      - "17072:8072"
     environment:
       PORT: "6899 8069 8072"
       TARGET: odoo
@@ -33,7 +33,7 @@ services:
         COMPILE: "false"
     environment:
       DOODBA_ENVIRONMENT: "${DOODBA_ENVIRONMENT-devel}"
-      INITIAL_LANG: "en_US"
+      INITIAL_LANG: "es_ES"
       LIST_DB: "true"
       DEBUGPY_ENABLE: "${DOODBA_DEBUGPY_ENABLE:-0}"
       PGDATABASE: &dbname devel
@@ -64,6 +64,9 @@ services:
       - --limit-time-real=9999999
       - --workers=0
       - --dev=reload,qweb,werkzeug,xml
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
 
   db:
     extends:
@@ -168,7 +171,7 @@ services:
 
 networks:
   default:
-    internal: ${DOODBA_NETWORK_INTERNAL-true}
+    internal: ${DOODBA_NETWORK_INTERNAL-false}
   public:
 
 volumes:
