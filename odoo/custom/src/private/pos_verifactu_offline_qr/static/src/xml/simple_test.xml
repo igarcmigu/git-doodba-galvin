@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates id="template" xml:space="preserve">
+
+    <!-- Extensión de la plantilla principal del ticket de recibo -->
+    <t t-name="OrderReceipt" t-inherit="point_of_sale.OrderReceipt" t-inherit-mode="extension">
+
+        <!-- Añadir antes del último div (normalmente el pie de página) -->
+        <xpath expr="//div[@class='pos-receipt-container']/div[last()]" position="before">
+            <div class="test-custom-load" style="text-align: center; border-top: 2px solid green; margin-top: 10px; padding: 5px;">
+                <p style="font-weight: bold; color: green;">✅ ¡XML CUSTOM CARGADO CORRECTAMENTE!</p>
+            </div>
+        </xpath>
+    </t>
+
+</templates>
