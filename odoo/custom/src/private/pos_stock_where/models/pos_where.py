@@ -1,6 +1,5 @@
 from odoo import api, fields, models
 
-
 class PosConfig(models.Model):
     _inherit = "pos.config"
 
@@ -13,7 +12,6 @@ class PosConfig(models.Model):
         string="Ámbito sububicaciones (informativo)",
         help="Cómo agrupar el desglose mostrado en el POS. No afecta a la restricción de venta.",
     )
-
 
 class ProductProduct(models.Model):
     _inherit = "product.product"
@@ -52,18 +50,15 @@ class ProductProduct(models.Model):
                     ("location_id", "child_of", loc.id),
                 ],
                 ["quantity:sum", "reserved_quantity:sum"],
-                [],
+                []
             )
-            qty = (rg[0]["quantity"] if rg else 0.0) - (
-                rg[0]["reserved_quantity"] if rg else 0.0
-            )
-            res.append(
-                {
-                    "location_id": loc.id,
-                    "complete_name": loc.complete_name,
-                    "qty": qty,
-                    "is_origin": loc.id == root.id,
-                }
-            )
+            qty = ((rg[0]["quantity"] if rg else 0.0) -
+                   (rg[0]["reserved_quantity"] if rg else 0.0))
+            res.append({
+                "location_id": loc.id,
+                "complete_name": loc.complete_name,
+                "qty": qty,
+                "is_origin": loc.id == root.id,
+            })
 
         return sorted(res, key=lambda x: x["complete_name"])

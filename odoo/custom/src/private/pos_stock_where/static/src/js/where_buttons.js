@@ -1,9 +1,9 @@
 /** @odoo-module **/
 
-import {patch} from "@web/core/utils/patch";
-import {useService} from "@web/core/utils/hooks";
-import {onMounted, onPatched, onWillUpdateProps, useState} from "@odoo/owl";
-import {ProductInfoPopup} from "@point_of_sale/app/screens/product_screen/product_info_popup/product_info_popup";
+import { patch } from "@web/core/utils/patch";
+import { useService } from "@web/core/utils/hooks";
+import { onMounted, onPatched, onWillUpdateProps, useState } from "@odoo/owl";
+import { ProductInfoPopup } from "@point_of_sale/app/screens/product_screen/product_info_popup/product_info_popup";
 
 console.log("[pos_stock_where] JS cargado (pretty labels)");
 
@@ -13,7 +13,7 @@ patch(ProductInfoPopup.prototype, {
     setup() {
         if (originalSetup) originalSetup.apply(this, arguments);
 
-        this._posWhere = useState({rows: [], productId: null});
+        this._posWhere = useState({ rows: [], productId: null });
 
         const orm = useService("orm");
         const posSvc = useService("pos");
@@ -53,13 +53,9 @@ patch(ProductInfoPopup.prototype, {
                     console.log("[pos_stock_where] host local OK:", local);
                     return local;
                 }
-                console.warn(
-                    "[pos_stock_where] host local NO encontrado dentro de this.el"
-                );
+                console.warn("[pos_stock_where] host local NO encontrado dentro de this.el");
             }
-            const global = document.querySelector(
-                ".popup.product-info-popup main.body, .popup.product-info-popup .modal-body"
-            );
+            const global = document.querySelector(".popup.product-info-popup main.body, .popup.product-info-popup .modal-body");
             if (global) {
                 console.log("[pos_stock_where] host global OK:", global);
                 return global;
@@ -99,7 +95,7 @@ patch(ProductInfoPopup.prototype, {
             container.innerHTML = "";
 
             const h = document.createElement("h4");
-            h.textContent = "Stock disponible";
+            h.textContent = "Stock disponible"; 
             container.appendChild(h);
 
             if (!rows.length) {
@@ -156,10 +152,7 @@ patch(ProductInfoPopup.prototype, {
         });
 
         onWillUpdateProps(async (nextProps) => {
-            if (
-                nextProps?.product &&
-                nextProps.product.id !== this._posWhere.productId
-            ) {
+            if (nextProps?.product && nextProps.product.id !== this._posWhere.productId) {
                 await loadWhere(nextProps.product);
                 safeRender();
             }

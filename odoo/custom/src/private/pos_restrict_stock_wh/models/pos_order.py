@@ -1,26 +1,19 @@
 import logging
-
 from odoo import _, api, models
 from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
-
 class PosOrder(models.Model):
     _inherit = "pos.order"
 
     def _pos_origin_location(self, config):
-        return (
-            config.picking_type_id.default_location_src_id or config.stock_location_id
-        )
+        return config.picking_type_id.default_location_src_id or config.stock_location_id
 
     def _free_qty_in_tree(self, product_id, root_loc_id):
-        """free = quantity - reserved en root_loc y TODAS sus hijas."""
         rg = self.env["stock.quant"].read_group(
-            domain=[
-                ("product_id", "=", product_id),
-                ("location_id", "child_of", root_loc_id),
-            ],
+            domain=[("product_id", "=", product_id),
+                    ("location_id", "child_of", root_loc_id)],
             fields=["quantity:sum", "reserved_quantity:sum"],
             groupby=[],
         )
@@ -31,7 +24,6 @@ class PosOrder(models.Model):
         return qty - res
 
     def _extract_required_from_vals(self, vals):
-        """Suma cantidades >0 de las líneas en el formato O2M de create()."""
         req = {}
         for cmd in vals.get("lines") or []:
             if not isinstance(cmd, (list, tuple)) or len(cmd) < 3:
@@ -48,25 +40,20 @@ class PosOrder(models.Model):
     def _check_required_map(self, req_map, location, label):
         if not req_map:
             return
-        errors = []
+        missing_names = []
         for pid, need in req_map.items():
             have = self._free_qty_in_tree(pid, location.id)
             if have < need:
                 prod = self.env["product.product"].browse(pid)
-                errors.append(
-                    _(
-                        "- %(p)s → necesitas %(need).2f, disponible en %(loc)s: %(have).2f",
-                        p=prod.display_name,
-                        need=need,
-                        loc=location.display_name,
-                        have=have,
-                    )
-                )
-        if errors:
-            msg = _("Sin stock en la ubicación del POS (%s):\n%s") % (
-                label,
-                "\n".join(errors),
-            )
+                missing_names.append(prod.display_name)
+
+        if missing_names:
+            # Quita duplicados preservando orden
+            unique = list(dict.fromkeys(missing_names))
+            quoted = '", "'.join(unique)
+            msg = _('Sin stock de: "%(names)s". Comprueba si hay en otras ubicaciones.') % {
+                "names": quoted
+            }
             _logger.warning("POS restrict stock: %s", msg.replace("\n", " | "))
             raise UserError(msg)
 
@@ -74,20 +61,13 @@ class PosOrder(models.Model):
     def create(self, vals_list):
         for vals in vals_list:
             session = self.env["pos.session"].browse(vals.get("session_id"))
-            config = (
-                session.config_id
-                if session
-                else self.env["pos.config"].browse(vals.get("config_id"))
-            )
+            config = session.config_id if session else self.env["pos.config"].browse(vals.get("config_id"))
             if config and getattr(config, "restrict_out_of_stock", False):
                 loc = self._pos_origin_location(config)
                 if loc:
                     req = self._extract_required_from_vals(vals)
-                    _logger.info(
-                        "POS restrict stock: checking create() for POS '%s' at '%s'",
-                        config.display_name,
-                        loc.display_name,
-                    )
+                    _logger.info("POS restrict stock: checking create() for POS '%s' at '%s'",
+                                 config.display_name, loc.display_name)
                     self._check_required_map(req, loc, "creación")
         return super().create(vals_list)
 
@@ -96,31 +76,18 @@ class PosOrder(models.Model):
         for o in orders:
             data = o.get("data") or {}
             session = self.env["pos.session"].browse(data.get("pos_session_id"))
-            config = (
-                session.config_id
-                if session
-                else self.env["pos.config"].browse(data.get("config_id"))
-            )
+            config = session.config_id if session else self.env["pos.config"].browse(data.get("config_id"))
             if config and getattr(config, "restrict_out_of_stock", False):
                 loc = self._pos_origin_location(config)
                 if loc:
                     req = {}
                     for line in data.get("lines", []):
-                        vals = (
-                            line[2]
-                            if isinstance(line, (list, tuple)) and len(line) > 2
-                            else line
-                        )
+                        vals = line[2] if isinstance(line, (list, tuple)) and len(line) > 2 else line
                         qty = float(vals.get("qty") or 0.0)
                         if qty > 0 and vals.get("product_id"):
-                            req[vals["product_id"]] = (
-                                req.get(vals["product_id"], 0.0) + qty
-                            )
-                    _logger.info(
-                        "POS restrict stock: checking create_from_ui for POS '%s' at '%s'",
-                        config.display_name,
-                        loc.display_name,
-                    )
+                            req[vals["product_id"]] = req.get(vals["product_id"], 0.0) + qty
+                    _logger.info("POS restrict stock: checking create_from_ui for POS '%s' at '%s'",
+                                 config.display_name, loc.display_name)
                     self._check_required_map(req, loc, "pre-creación")
         return super().create_from_ui(orders, draft=draft)
 
@@ -134,10 +101,7 @@ class PosOrder(models.Model):
                     for l in order.lines:
                         if l.qty > 0:
                             req[l.product_id.id] = req.get(l.product_id.id, 0.0) + l.qty
-                    _logger.info(
-                        "POS restrict stock: checking action_pos_order_paid for POS '%s' at '%s'",
-                        config.display_name,
-                        loc.display_name,
-                    )
+                    _logger.info("POS restrict stock: checking action_pos_order_paid for POS '%s' at '%s'",
+                                 config.display_name, loc.display_name)
                     self._check_required_map(req, loc, "antes de pagar")
         return super().action_pos_order_paid()

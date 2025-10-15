@@ -1,6 +1,5 @@
 from odoo import http
 
-
 class PosRestrictStockWh(http.Controller):
     @http.route("/pos_restrict_stock_wh/where_available", type="json", auth="user")
     def where_available(self, product_id):

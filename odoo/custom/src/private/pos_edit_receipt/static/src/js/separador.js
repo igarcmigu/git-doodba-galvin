@@ -122,7 +122,7 @@ console.log("separador cargado");
     }
 
 
-    //Es básicamente el hook que llama a la funcion que crea la tabla
+    //Es básicamente el hook que llama a la funcion que crea la tabla cuando se crea un nuevo recibo
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
