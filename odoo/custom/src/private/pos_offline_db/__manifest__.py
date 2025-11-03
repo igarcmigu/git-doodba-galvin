@@ -8,7 +8,7 @@
   "assets": {
     "point_of_sale._assets_pos": [
       "pos_offline_db/static/src/js/pos_offline_db.js",
-      "pos_offline_db/static/src/js/pos_offline.js"
+      "pos_offline_db/static/src/js/pos_offline.js",
     ],
   },
   "installable": True

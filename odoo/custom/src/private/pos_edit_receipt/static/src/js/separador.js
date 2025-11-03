@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-console.log("separador cargado");
+//console.log("separador cargado");
 
 
 //Espera a que el POS esté listo
@@ -10,7 +10,7 @@ console.log("separador cargado");
         return setTimeout(waitForPOSRoot, 500);
     }
 
-    //console.log("POS root encontrado");
+    ////console.log("POS root encontrado");
 
 
     //Aplica formato a los numeros porque unos venian como float
@@ -35,7 +35,7 @@ console.log("separador cargado");
 
         const order = window.posmodel?.get_order?.();
         if (!order) {
-            console.warn("⚠️ No se pudo obtener el pedido activo del POS.");
+            //console.warn("⚠️ No se pudo obtener el pedido activo del POS.");
             return;
         }
 
@@ -118,7 +118,7 @@ console.log("separador cargado");
         taxBlock.appendChild(table);
         taxBlock.dataset.enhanced = "1";
 
-        //console.log("💈 Tabla de impuestos renderizada correctamente.");
+        ////console.log("💈 Tabla de impuestos renderizada correctamente.");
     }
 
 

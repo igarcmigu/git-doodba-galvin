@@ -1,11 +1,11 @@
 /** @odoo-module **/
 
-console.log("test_conexion cargado");
+//console.log("test_conexion cargado");
 
 (function waitForPOSRoot() {
   // Verifica si ha cargado la libreria que se usará para generar el QR en el navegador
   if (typeof QRCode === "undefined") {
-    console.error("Error: La librería qrcode.min.js no se ha cargado correctamente.");
+    //console.error("Error: La librería qrcode.min.js no se ha cargado correctamente.");
     return setTimeout(waitForPOSRoot, 500);
   }
 
@@ -62,7 +62,7 @@ console.log("test_conexion cargado");
   function generateAndShowQR(qrContainer, facturaUrl) {
     qrContainer.innerHTML = "";
     if (!facturaUrl) {
-      console.log("No se encontró la URL de la factura para generar el QR.");
+      //console.log("No se encontró la URL de la factura para generar el QR.");
       return;
     }
     const qrDiv = document.createElement("div");
@@ -77,9 +77,9 @@ console.log("test_conexion cargado");
         colorLight: "#ffffff",
         correctLevel: QRCode.CorrectLevel.H,
       });
-      // console.log("✅ QR de factura generado localmente.");
+      // //console.log("✅ QR de factura generado localmente.");
     } catch (e) {
-      console.error("❌ Error al generar el QR con la librería:", e);
+      //console.error("❌ Error al generar el QR con la librería:", e);
     }
   }
 
@@ -122,7 +122,7 @@ console.log("test_conexion cargado");
         textElement.style.display = "none";
       }
 
-      console.log("🟢 POS en línea");
+      //console.log("🟢 POS en línea");
     } else {
       // Muestra el texto
       if (isTextElementValid) {
@@ -148,7 +148,7 @@ console.log("test_conexion cargado");
         generateAndShowQR(qrElement, facturaUrl);
       }
 
-      console.log("🔴 POS sin conexión");
+      //console.log("🔴 POS sin conexión");
     }
   }
 

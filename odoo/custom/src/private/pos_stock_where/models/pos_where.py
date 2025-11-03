@@ -18,7 +18,6 @@ class ProductProduct(models.Model):
 
     @api.model
     def pos_where(self, product_id, config_id):
-        """Devuelve [{location_id, complete_name, qty, is_origin}] bajo el origen del POS."""
         product = self.browse(product_id)
         config = self.env["pos.config"].browse(config_id)
         if not product.exists() or not config.exists():
