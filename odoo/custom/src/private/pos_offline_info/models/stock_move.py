@@ -26,11 +26,32 @@ class StockMove(models.Model):
         loc = line and line.pos_src_location_id or False
         return line, loc
 
+    def _pos_src_get_allowed_ids(self, picking):
+        """Devuelve set(ids) de ubicaciones internas bajo la raíz del picking del TPV."""
+        if not picking or picking.picking_type_id.code != "outgoing":
+            return set(), None
+        root = picking.picking_type_id.default_location_src_id
+        if not root:
+            return set(), None
+        ids = self.env["stock.location"].search([
+            ("id", "child_of", [root.id]),
+            ("usage", "=", "internal"),
+        ]).ids
+        return set(ids), root
+
     def _pos_src_enforce_location(self):
         for move in self:
             line, loc = move._pos_src_line_and_loc()
+
             if line and not move.pos_order_line_id:
                 move.pos_order_line_id = line.id
+
+            allowed_ids, root = self._pos_src_get_allowed_ids(move.picking_id)
+            if loc and allowed_ids and loc.id not in allowed_ids:
+                _logger.info("POS SRC GUARD: loc %s no permitida; forzando raíz %s",
+                             loc.display_name, root and root.display_name)
+                loc = root
+
             _logger.info("POS SRC ENFORCE? move=%s state=%s line=%s loc=%s",
                          move.id, move.state, line and line.id, loc and loc.complete_name)
             if loc and getattr(loc, "usage", None) == "internal" and move.location_id != loc:
@@ -42,7 +63,6 @@ class StockMove(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        _logger.info("SM.create incoming vals: %s", vals_list)
         moves = super().create(vals_list)
         for m in moves:
             if not m.pos_order_line_id:

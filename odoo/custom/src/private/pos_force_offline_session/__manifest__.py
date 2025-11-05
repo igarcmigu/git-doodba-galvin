@@ -17,9 +17,17 @@
 
         'point_of_sale._assets_pos': [
             'pos_force_offline_session/static/src/js/pos_offline_rpc_patch.js',
+            'pos_force_offline_session/static/src/js/pos_offline_service_mock.js',
+
+            
+            'pos_force_offline_session/static/src/js/pos_chrome_fix_patch.js',
+            
             'pos_force_offline_session/static/pos_sw.js',
             'pos_force_offline_session/static/src/js/pos_user_alert_control.js',
+            'pos_force_offline_session/static/src/js/pos_offline_data_handler.js',
             'pos_force_offline_session/static/src/css/styles.css',
+
+            'pos_force_offline_session/static/src/js/pos_lazy_translation_patch.js',
         ],
     },
     'installable': True,

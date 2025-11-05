@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- TREE de pos.order.line: inserta columna tras product_id -->
     <record id="view_pos_order_line_tree_inherit_src_loc" model="ir.ui.view">
         <field name="name">pos.order.line.tree.inherit.src.location</field>
         <field name="model">pos.order.line</field>
@@ -18,7 +17,6 @@
         </field>
     </record>
 
-    <!-- FORM de pos.order.line: inserta campo tras product_id en el primer group -->
     <record id="view_pos_order_line_form_inherit_src_loc" model="ir.ui.view">
         <field name="name">pos.order.line.form.inherit.src.location</field>
         <field name="model">pos.order.line</field>

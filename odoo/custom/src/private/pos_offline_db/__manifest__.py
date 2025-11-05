@@ -1,6 +1,6 @@
 {
   "name": "POS Offline DB",
-  "version": "17.0.1.0.106",
+  "version": "17.0.1.0.122",
   "summary": "Para asegurarse de guardar los pedidos cuando se cae la conexión.",
   "author": "David Baquero Amaral",
   "license": "LGPL-3",
