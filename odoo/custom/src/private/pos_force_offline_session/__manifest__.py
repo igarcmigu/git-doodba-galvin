@@ -9,7 +9,6 @@
     ],
     'assets': {
         'web.assets_backend': [
-
             'pos_force_offline_session/static/src/js/pos_action_registry.js',
 
             'pos_force_offline_session/static/src/js/pos_offline_button_handler.js',
@@ -28,7 +27,6 @@
             'pos_force_offline_session/static/src/js/pos_user_alert_control.js',
             'pos_force_offline_session/static/src/js/pos_offline_data_handler.js',
             'pos_force_offline_session/static/src/css/styles.css',
-
 
         ],
     },

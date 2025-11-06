@@ -53,7 +53,6 @@ self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
     const request = event.request;
     const isNavigation = request.mode === 'navigate';
-
     // 0. Ignorar POST, llamadas RPC de Odoo y esquemas no HTTP(S).
     if (request.method !== 'GET' || url.pathname.startsWith('/web/dataset/call_kw')) {
         return;

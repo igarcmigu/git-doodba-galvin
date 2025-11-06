@@ -60,7 +60,11 @@ class PosOrder(models.Model):
                 missing_names.append(p.display_name)
 
         if missing_names:
+<<<<<<< HEAD
             unique = list(dict.fromkeys(missing_names))
+=======
+            unique = list(dict.fromkeys(missing_names))
+>>>>>>> refs/remotes/origin/master
             quoted = '", "'.join(unique)
             msg = _('Sin stock de: "%(names)s". Comprueba si hay en otras ubicaciones.') % {
                 "names": quoted
