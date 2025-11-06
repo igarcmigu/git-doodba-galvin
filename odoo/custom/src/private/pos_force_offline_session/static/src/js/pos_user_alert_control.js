@@ -1,18 +1,18 @@
 /** @odoo-module **/
 
-import { patch } from "@web/core/utils/patch";
-import { Navbar } from "@point_of_sale/app/navbar/navbar";
-import { useService } from "@web/core/utils/hooks";
-import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
-import { onMounted } from "@odoo/owl";
+import {patch} from "@web/core/utils/patch";
+import {Navbar} from "@point_of_sale/app/navbar/navbar";
+import {useService} from "@web/core/utils/hooks";
+import {ConfirmationDialog} from "@web/core/confirmation_dialog/confirmation_dialog";
+import {onMounted} from "@odoo/owl";
 
 // =================================================================
 // 1. IndexedDB Utils (Gestión de Logs Offline)
 // ... (Mantener el código de IndexedDB sin cambios) ...
 // =================================================================
 
-const DB_NAME = 'PosOfflineDB';
-const STORE_NAME = 'closure_logs';
+const DB_NAME = "PosOfflineDB";
+const STORE_NAME = "closure_logs";
 const DB_VERSION = 1;
 
 /** Abre la base de datos o crea el almacén de objetos. */
@@ -26,7 +26,7 @@ function openIndexedDB() {
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: 'timestamp' });
+                db.createObjectStore(STORE_NAME, {keyPath: "timestamp"});
             }
         };
     });
@@ -36,7 +36,7 @@ function openIndexedDB() {
 async function saveIndexedDBLog(logEntry) {
     try {
         const db = await openIndexedDB();
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const transaction = db.transaction([STORE_NAME], "readwrite");
         const store = transaction.objectStore(STORE_NAME);
         const request = store.add(logEntry);
 
@@ -46,12 +46,18 @@ async function saveIndexedDBLog(logEntry) {
                 resolve();
             };
             request.onerror = (event) => {
-                console.error("🔴 [IndexedDB] Fallo al guardar el log:", event.target.error);
+                console.error(
+                    "🔴 [IndexedDB] Fallo al guardar el log:",
+                    event.target.error
+                );
                 reject(event.target.error);
             };
         });
     } catch (error) {
-        console.error("🔴 [IndexedDB] Error al acceder a la base de datos para guardar:", error);
+        console.error(
+            "🔴 [IndexedDB] Error al acceder a la base de datos para guardar:",
+            error
+        );
     }
 }
 
@@ -59,7 +65,7 @@ async function saveIndexedDBLog(logEntry) {
 async function getAllIndexedDBLogs() {
     try {
         const db = await openIndexedDB();
-        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const transaction = db.transaction([STORE_NAME], "readonly");
         const store = transaction.objectStore(STORE_NAME);
         const request = store.getAll();
 
@@ -77,13 +83,15 @@ async function getAllIndexedDBLogs() {
 async function clearIndexedDBLogs() {
     try {
         const db = await openIndexedDB();
-        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const transaction = db.transaction([STORE_NAME], "readwrite");
         const store = transaction.objectStore(STORE_NAME);
         const request = store.clear();
 
         return new Promise((resolve, reject) => {
             request.onsuccess = () => {
-                console.log("🧹 [IndexedDB] Logs eliminados después de la sincronización.");
+                console.log(
+                    "🧹 [IndexedDB] Logs eliminados después de la sincronización."
+                );
                 resolve();
             };
             request.onerror = (event) => reject(event.target.error);
@@ -117,7 +125,6 @@ async function isOdooReachable() {
         return false;
     }
 }
-
 
 // =================================================================
 // 3. PATCH: Navbar (Lógica de Interceptación, Logs de Red y Sincronización)
@@ -155,14 +162,32 @@ patch(Navbar.prototype, {
                 const oldStatus = this.isCurrentlyOffline ? "🔴 OFFLINE" : "🟢 ONLINE";
                 const newStatus = newStatusOffline ? "🔴 OFFLINE" : "🟢 ONLINE";
 
-                console.log(`📡 [NETWORK STATUS CHANGE] Conexión ha cambiado de ${oldStatus} a ${newStatus}. (Dev: ${isDeviceOnline ? '✅' : '❌'} | Odoo: ${isOdooOnline ? '✅' : '❌'})`);
+                console.log(
+                    `📡 [NETWORK STATUS CHANGE] Conexión ha cambiado de ${oldStatus} a ${newStatus}. (Dev: ${
+                        isDeviceOnline ? "✅" : "❌"
+                    } | Odoo: ${isOdooOnline ? "✅" : "❌"})`
+                );
 
                 // 🚨 REGISTRO DE EVENTOS DE RED
-                if (newStatusOffline) { // Si pasa a OFFLINE
-                    this._saveLog('network_lost', `El dispositivo pasó a OFFLINE. Razón: ${!isDeviceOnline ? 'Dispositivo' : 'Servidor Odoo no accesible'}.`);
-                } else { // Si pasa a ONLINE (reconexión)
-                    this._saveLog('network_recovered', 'El dispositivo recuperó la conexión ONLINE y el servidor Odoo es accesible.');
-                    console.log("⏳ [SYNC DELAY] Conexión online recuperada. Retrasando sincronización 2 segundos...");
+                if (newStatusOffline) {
+                    // Si pasa a OFFLINE
+                    this._saveLog(
+                        "network_lost",
+                        `El dispositivo pasó a OFFLINE. Razón: ${
+                            !isDeviceOnline
+                                ? "Dispositivo"
+                                : "Servidor Odoo no accesible"
+                        }.`
+                    );
+                } else {
+                    // Si pasa a ONLINE (reconexión)
+                    this._saveLog(
+                        "network_recovered",
+                        "El dispositivo recuperó la conexión ONLINE y el servidor Odoo es accesible."
+                    );
+                    console.log(
+                        "⏳ [SYNC DELAY] Conexión online recuperada. Retrasando sincronización 2 segundos..."
+                    );
                     this._syncAttemptCount = 0;
                     setTimeout(() => {
                         this._syncOfflineLogs();
@@ -185,7 +210,9 @@ patch(Navbar.prototype, {
         // Se deja la lógica de sincronización al inicio dentro del setTimeout anterior.
         // =================================================================
 
-        console.log("🛠️ [POS OFFLINE PATCH] Setup del Navbar iniciado. Preparando Observador de DOM.");
+        console.log(
+            "🛠️ [POS OFFLINE PATCH] Setup del Navbar iniciado. Preparando Observador de DOM."
+        );
         onMounted(this.setupCloseButtonInterceptor);
     },
 
@@ -206,7 +233,9 @@ patch(Navbar.prototype, {
             };
             await saveIndexedDBLog(logEntry);
         } else {
-            console.error("🔴 [LOGGING] No se pudo guardar el log. Sesión o Usuario no disponibles.");
+            console.error(
+                "🔴 [LOGGING] No se pudo guardar el log. Sesión o Usuario no disponibles."
+            );
         }
     },
 
@@ -215,45 +244,60 @@ patch(Navbar.prototype, {
     // -------------------------------------------------------------------------
 
     setupCloseButtonInterceptor() {
-        const topHeader = document.querySelector('.pos-topheader');
+        const topHeader = document.querySelector(".pos-topheader");
         if (!topHeader) {
-            console.error("🔴 [DOM CRÍTICO] Contenedor principal del POS (.pos-topheader) no encontrado.");
+            console.error(
+                "🔴 [DOM CRÍTICO] Contenedor principal del POS (.pos-topheader) no encontrado."
+            );
             return;
         }
 
         const observer = new MutationObserver((mutationsList, observer) => {
-            const subMenu = topHeader.querySelector('.sub-menu');
-            const closeButtonAnchor = subMenu ? subMenu.querySelector('.close-button a') : null;
+            const subMenu = topHeader.querySelector(".sub-menu");
+            const closeButtonAnchor = subMenu
+                ? subMenu.querySelector(".close-button a")
+                : null;
 
             if (closeButtonAnchor && !closeButtonAnchor._is_intercepted) {
-                console.log("✅ [DOM Interceptor] Botón 'Cerrar sesión' encontrado. Inyectando controlador de eventos.");
+                console.log(
+                    "✅ [DOM Interceptor] Botón 'Cerrar sesión' encontrado. Inyectando controlador de eventos."
+                );
 
                 closeButtonAnchor.onclick = async (event) => {
                     if (this.isCurrentlyOffline) {
-                        console.warn("🔴 [CONEXIÓN DETECTADA] ¡Modo sin conexión! Interceptando acción de cierre.");
+                        console.warn(
+                            "🔴 [CONEXIÓN DETECTADA] ¡Modo sin conexión! Interceptando acción de cierre."
+                        );
                         event.preventDefault();
                         event.stopPropagation();
 
                         // 🚨 1. REGISTRO: El usuario inició el intento
                         await this._saveLog(
-                            'attempted_close',
-                            `El usuario hizo clic en "Cerrar Sesión" estando OFFLINE. Órdenes pendientes: ${this.pos.db.get_orders().length}. Se muestra la advertencia.`
+                            "attempted_close",
+                            `El usuario hizo clic en "Cerrar Sesión" estando OFFLINE. Órdenes pendientes: ${
+                                this.pos.db.get_orders().length
+                            }. Se muestra la advertencia.`
                         );
 
                         // Llama a la advertencia, que usará la promesa del diálogo
                         const shouldContinue = await this.showOfflineCloseWarning();
 
                         if (shouldContinue) {
-                            console.log("✅ Intercepción completada. Ejecutando acción de cierre de Odoo...");
+                            console.log(
+                                "✅ Intercepción completada. Ejecutando acción de cierre de Odoo..."
+                            );
                             // Desactiva el interceptor y lanza el evento de clic original
                             closeButtonAnchor.onclick = null;
                             closeButtonAnchor.click();
                         } else {
-                            console.log("🚫 Cierre de sesión cancelado por el usuario.");
+                            console.log(
+                                "🚫 Cierre de sesión cancelado por el usuario."
+                            );
                         }
-
                     } else {
-                        console.log("🟢 [CONEXIÓN DETECTADA] Conexión activa. Permitiendo cierre de sesión normal.");
+                        console.log(
+                            "🟢 [CONEXIÓN DETECTADA] Conexión activa. Permitiendo cierre de sesión normal."
+                        );
                     }
                 };
 
@@ -262,8 +306,10 @@ patch(Navbar.prototype, {
             }
         });
 
-        observer.observe(topHeader, { childList: true, subtree: true });
-        console.log("🔬 [DOM Observer] Observador iniciado en el contenedor '.pos-topheader'.");
+        observer.observe(topHeader, {childList: true, subtree: true});
+        console.log(
+            "🔬 [DOM Observer] Observador iniciado en el contenedor '.pos-topheader'."
+        );
     },
 
     /**
@@ -271,7 +317,7 @@ patch(Navbar.prototype, {
      * promesa del servicio 'dialog' de Odoo.
      */
     async showOfflineCloseWarning() {
-        const sessionName = this.pos.pos_session.name || 'Sesión POS';
+        const sessionName = this.pos.pos_session.name || "Sesión POS";
         const ordersCount = this.pos.db.get_orders().length;
 
         const warningTitle = "🛑 ADVERTENCIA CRÍTICA: SIN CONEXIÓN A INTERNET";
@@ -296,10 +342,9 @@ patch(Navbar.prototype, {
 
             // Si llegamos aquí, la promesa se RESOLVIÓ (el usuario confirmó).
             const logDetails = `El usuario ACEPTÓ cerrar la sesión tras la advertencia crítica. Órdenes pendientes: ${ordersCount}.`;
-            await this._saveLog('accepted_close', logDetails);
+            await this._saveLog("accepted_close", logDetails);
 
             return true; // Continuar con el cierre
-
         } catch (e) {
             // Si llegamos aquí, la promesa fue RECHAZADA (el usuario canceló o cerró el diálogo).
             return false; // Cancelar el cierre
@@ -312,19 +357,25 @@ patch(Navbar.prototype, {
 
     async _retrySyncLogs(delay = 2000) {
         if (this.isCurrentlyOffline) {
-            console.warn("❌ Sincronización de logs cancelada: conexión perdida de nuevo.");
+            console.warn(
+                "❌ Sincronización de logs cancelada: conexión perdida de nuevo."
+            );
             return;
         }
 
         this._syncAttemptCount += 1;
         if (this._syncAttemptCount > this._maxSyncAttempts) {
-            console.error(`❌ [SYNC FAILED] Límite de ${this._maxSyncAttempts} reintentos alcanzado. Logs permanecerán en IndexedDB.`);
+            console.error(
+                `❌ [SYNC FAILED] Límite de ${this._maxSyncAttempts} reintentos alcanzado. Logs permanecerán en IndexedDB.`
+            );
             return;
         }
 
-        console.log(`🔄 [SYNC RETRY] Reintentando sincronización (Intento ${this._syncAttemptCount}/${this._maxSyncAttempts}) usando Fetch API...`);
+        console.log(
+            `🔄 [SYNC RETRY] Reintentando sincronización (Intento ${this._syncAttemptCount}/${this._maxSyncAttempts}) usando Fetch API...`
+        );
 
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         await this._syncOfflineLogs();
     },
 
@@ -336,16 +387,20 @@ patch(Navbar.prototype, {
         const logsToSync = await getAllIndexedDBLogs();
 
         if (logsToSync.length === 0) {
-            console.log("✅ [SYNC] No hay logs de cierre pendientes de sincronizar en IndexedDB.");
+            console.log(
+                "✅ [SYNC] No hay logs de cierre pendientes de sincronizar en IndexedDB."
+            );
             return;
         }
 
         if (this._syncAttemptCount === 0) {
-            console.log(`🔄 [SYNC] Intentando sincronizar ${logsToSync.length} logs de cierre de IndexedDB...`);
+            console.log(
+                `🔄 [SYNC] Intentando sincronizar ${logsToSync.length} logs de cierre de IndexedDB...`
+            );
         }
 
         // Mapeamos los logs a la estructura que espera el método Python
-        const formattedLogs = logsToSync.map(log => ({
+        const formattedLogs = logsToSync.map((log) => ({
             session_id: log.session_id,
             user_id: log.user_id,
             timestamp: log.timestamp,
@@ -355,37 +410,46 @@ patch(Navbar.prototype, {
 
         try {
             // Llamada al backend de Odoo
-            const response = await fetch('/web/dataset/call_kw/pos.offline.log/create_multiple_log_entries', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': odoo.csrf_token,
-                },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'call',
-                    params: {
-                        model: 'pos.offline.log',
-                        method: 'create_multiple_log_entries',
-                        args: [formattedLogs],
-                        kwargs: {},
-                    }
-                }),
-            });
+            const response = await fetch(
+                "/web/dataset/call_kw/pos.offline.log/create_multiple_log_entries",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRF-Token": odoo.csrf_token,
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: "2.0",
+                        method: "call",
+                        params: {
+                            model: "pos.offline.log",
+                            method: "create_multiple_log_entries",
+                            args: [formattedLogs],
+                            kwargs: {},
+                        },
+                    }),
+                }
+            );
 
             const result = await response.json();
 
             if (result.error) {
-                throw new Error(`Odoo Server Error (RPC Response): ${result.error.message}`);
+                throw new Error(
+                    `Odoo Server Error (RPC Response): ${result.error.message}`
+                );
             }
 
             // Éxito: limpiar DB local
             await clearIndexedDBLogs();
             this._syncAttemptCount = 0;
-            console.log(`🎉 [SYNC SUCCESS] Logs sincronizados y eliminados de IndexedDB. (Vía Fetch)`);
-
+            console.log(
+                `🎉 [SYNC SUCCESS] Logs sincronizados y eliminados de IndexedDB. (Vía Fetch)`
+            );
         } catch (error) {
-            console.error("🔴 [SYNC FAILED] Fallo en la sincronización al servidor (Fetch API):", error);
+            console.error(
+                "🔴 [SYNC FAILED] Fallo en la sincronización al servidor (Fetch API):",
+                error
+            );
             this._retrySyncLogs(2000);
         }
     },
