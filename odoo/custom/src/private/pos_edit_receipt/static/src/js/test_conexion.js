@@ -85,13 +85,21 @@
 
  //Comprueba si el servidor de Odoo es realmente accesible como check extra de conexion
  async function isOdooReachable() {
+<<<<<<< HEAD
+
+=======
   
+>>>>>>> refs/remotes/origin/master
     // 🛑 V25: NEUTRALIZACIÓN PARA EL MODO OFFLINE FORZADO
     if (window.posOfflineDataHandler && window.posOfflineDataHandler.isOfflineModeActive) {
         console.warn("🟢 CUSTOM SCRIPT: isOdooReachable neutralizado (Modo Offline Forzado).");
         return false; // Evita la llamada de red y el error
     }
+<<<<<<< HEAD
+
+=======
     
+>>>>>>> refs/remotes/origin/master
     // Lógica original de intento de conexión
   try {
    const response = await fetch("/web", {
@@ -180,4 +188,8 @@
 
  //Establece el estado inicial
  setTimeout(updateOfflineElementsVisibility, 100);
+<<<<<<< HEAD
 })();
+=======
+})();
+>>>>>>> refs/remotes/origin/master

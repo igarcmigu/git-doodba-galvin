@@ -60,7 +60,11 @@ class PosOrder(models.Model):
                 missing_names.append(p.display_name)
 
         if missing_names:
+<<<<<<< HEAD
+            unique = list(dict.fromkeys(missing_names))
+=======
             unique = list(dict.fromkeys(missing_names))  
+>>>>>>> refs/remotes/origin/master
             quoted = '", "'.join(unique)
             msg = _('Sin stock de: "%(names)s". Comprueba si hay en otras ubicaciones.') % {
                 "names": quoted
@@ -107,6 +111,24 @@ class PosOrder(models.Model):
                     self._check_required_map(req, loc, "pre-creación")
         return super().create_from_ui(orders, draft=draft)
 
+<<<<<<< HEAD
+    #   def action_pos_order_paid(self):
+    #     for order in self:
+    #         config = order.session_id.config_id
+    #         if config and getattr(config, "restrict_out_of_stock", False):
+    #             loc = self._pos_origin_location(config)
+    #             if loc:
+    #                 req = {}
+    #                 for l in order.lines:
+    #                     if l.qty > 0:
+    #                         req[l.product_id.id] = req.get(l.product_id.id, 0.0) + l.qty
+    #                 _logger.info(
+    #                     "POS restrict stock: checking action_pos_order_paid for POS '%s' at '%s'",
+    #                     config.display_name, loc.display_name
+    #                 )
+    #                 self._check_required_map(req, loc, "antes de pagar")
+    #     return super().action_pos_order_paid()
+=======
     def action_pos_order_paid(self):
         for order in self:
             config = order.session_id.config_id
@@ -123,3 +145,4 @@ class PosOrder(models.Model):
                     )
                     self._check_required_map(req, loc, "antes de pagar")
         return super().action_pos_order_paid()
+>>>>>>> refs/remotes/origin/master
