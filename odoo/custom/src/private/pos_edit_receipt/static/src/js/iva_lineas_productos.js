@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-console.log("iva_lineas cargado");
+//console.log("iva_lineas cargado");
 
 (function waitForPOSRoot() {
 
@@ -25,7 +25,7 @@ console.log("iva_lineas cargado");
         //Obtiene el objeto del pedido activo
         const order = getActiveOrder();
         if (!order) {
-            console.warn("⚠️ No se pudo obtener el pedido activo del POS.");
+            //console.warn("⚠️ No se pudo obtener el pedido activo del POS.");
             return;
         }
 
@@ -66,7 +66,7 @@ console.log("iva_lineas cargado");
                          lineTaxAmount = lineModel.get_tax() || 0;
                     } else {
 
-                         console.warn(`⚠️ No se pudo obtener el detalle de IVA para ${lineModel.product.display_name}. Usando 0.00.`);
+                         //console.warn(`⚠️ No se pudo obtener el detalle de IVA para ${lineModel.product.display_name}. Usando 0.00.`);
                     }
                 }
                 const li = document.createElement("li");
