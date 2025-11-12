@@ -2,6 +2,8 @@
 
 import { patch } from "@web/core/utils/patch";
 import { Chrome } from "@point_of_sale/app/pos_app";
+import { Chrome } from "@point_of_sale/app/pos_app";
+
 import { useService } from "@web/core/utils/hooks";
 import { usePos } from "@point_of_sale/app/store/pos_hook";
 import { reactive, onMounted, onWillStart } from "@odoo/owl";
@@ -50,6 +52,7 @@ patch(Chrome.prototype, {
 
     setup() {
         // Lógica original del setup:
+
         this.pos = usePos();
         this.popup = useService("popup");
 
@@ -72,6 +75,7 @@ patch(Chrome.prototype, {
             }
         }
 
+
         document.addEventListener("keydown", (ev) => {
             if (ev.key === "Backspace" && !ev.target.matches("input, textarea")) {
                 ev.preventDefault();
@@ -90,6 +94,19 @@ patch(Chrome.prototype, {
             }
 
             // Mantenemos el _loadFonts seguro
+        // 🚨 HOOK CRÍTICO: LIMPIEZA DE LISTAS DE COMPONENTES ANTES DEL PRIMER RENDER
+        onWillStart(async () => {
+            if (this.pos) {
+                // 💡 FIX V4: El filtro robusto garantiza que el resultado sea [] si la fuente es 'undefined'.
+                this.pos.pos_components_header = _filterUndefinedComponents(this.pos.pos_components_header);
+                this.pos.pos_components_status = _filterUndefinedComponents(this.pos.pos_components_status);
+
+                // Otras listas de componentes comunes a limpiar, solo por si acaso:
+                this.pos.pos_components_main = _filterUndefinedComponents(this.pos.pos_components_main);
+            }
+
+            // Mantenemos el _loadFonts seguro
+
             if (this.pos && this.pos._loadFonts) {
                 await this.pos._loadFonts();
                 console.log("✅ [CHROME PATCH] _loadFonts ejecutado de forma segura.");
@@ -98,9 +115,16 @@ patch(Chrome.prototype, {
             }
         });
 
+                 console.warn("⚠️ [CHROME PATCH] Se saltó _loadFonts.");
+            }
+        });
+
+
         // Re-implementar el onMounted original
         onMounted(this.props.disableLoader);
     },
 });
 
 console.log("✅ [CHROME PATCH] Parche de Chrome (V4) aplicado.");
+console.log("✅ [CHROME PATCH] Parche de Chrome (V4) aplicado.");
+

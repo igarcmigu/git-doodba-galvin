@@ -6,6 +6,8 @@ import { useService } from "@web/core/utils/hooks";
 import { ConfirmationDialog } from "@web/core/confirmation_dialog/confirmation_dialog";
 import { onMounted, onWillUnmount } from "@odoo/owl";
 
+
+
 const DB_NAME = 'PosOfflineDB';
 const STORE_NAME = 'closure_logs';
 const DB_VERSION = 1;
@@ -15,6 +17,12 @@ function openIndexedDB() {
         const request = window.indexedDB.open(DB_NAME, DB_VERSION);
         request.onerror = (event) => reject(event.target.error);
         request.onsuccess = (event) => resolve(event.target.result);
+    return new Promise((resolve, reject) => {
+        const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+
+        request.onerror = (event) => reject(event.target.error);
+        request.onsuccess = (event) => resolve(event.target.result);
+
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
             if (!db.objectStoreNames.contains(STORE_NAME)) {
@@ -22,6 +30,7 @@ function openIndexedDB() {
             }
         };
     });
+
 }
 
 async function saveIndexedDBLog(logEntry) {
@@ -41,6 +50,7 @@ async function saveIndexedDBLog(logEntry) {
         });
     } catch (error) {
     }
+
 }
 
 async function getAllIndexedDBLogs() {
@@ -57,6 +67,7 @@ async function getAllIndexedDBLogs() {
     } catch (error) {
         return [];
     }
+
 }
 
 async function clearIndexedDBLogs() {
@@ -74,6 +85,7 @@ async function clearIndexedDBLogs() {
         });
     } catch (error) {
     }
+
 }
 
 function ordersCount() {
@@ -137,6 +149,16 @@ async function isOdooReachable() {
 
 patch(Navbar.prototype, {
     __OWL_DEBUG__: "pos_offline_session.NavbarDOMPatch",
+
+// 3. PATCH: Navbar (Lógica de Interceptación, Logs de Red y Sincronización)
+// =================================================================
+
+patch(Navbar.prototype, {
+    __OWL_DEBUG__: "pos_offline_session.NavbarDOMPatch",
+
+    // -------------------------------------------------------------------------
+    // A. SETUP (INICIALIZACIÓN)
+    // -------------------------------------------------------------------------
 
     setup() {
         super.setup();
@@ -393,3 +415,4 @@ patch(ConfirmationDialog.prototype, {
         }
     },
 });
+

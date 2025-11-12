@@ -33,6 +33,87 @@ function getFacturaUrl(qrElement) {
             const urlMatch = linkText.match(/(https?:\/\/[^\s]+)/);
             return urlMatch ? urlMatch[0] : null;
         }
+
+    // 🛑 V25: NEUTRALIZACIÓN PARA EL MODO OFFLINE FORZADO
+    if (window.posOfflineDataHandler && window.posOfflineDataHandler.isOfflineModeActive) {
+        console.warn("🟢 CUSTOM SCRIPT: isOdooReachable neutralizado (Modo Offline Forzado).");
+        return false; // Evita la llamada de red y el error
+    }
+
+    // Lógica original de intento de conexión
+  try {
+   const response = await fetch("/web", {
+    method: "GET",
+    cache: "no-store",
+    signal: AbortSignal.timeout(5000),
+   });
+   return response.ok;
+  } catch {
+   return false;
+  }
+ }
+
+ async function updateOfflineElementsVisibility() {
+  // Comprueba si hay conexion a nivel local y si es accesible el servidor
+  let isOnline = navigator.onLine;
+  if (isOnline) {
+   const reachable = await isOdooReachable();
+   if (!reachable) isOnline = false;
+  }
+
+  //Se sacan y validan los elementos a ocultar
+
+  let qrElement = document.querySelector(QR_ELEMENT_SELECTOR);
+  if (!qrElement) return;
+
+  const textElement = qrElement.previousElementSibling;
+  const isTextElementValid =
+   textElement && textElement.classList.contains(TEXT_BLOCK_CLASS.replace(".", ""));
+
+  //Si se confirma que está online oculta el QR y el mensaje de escanear
+  if (isOnline) {
+   qrElement.style.display = "none";
+
+   if (isTextElementValid) {
+    textElement.style.display = "none";
+   }
+
+   //console.log("🟢 POS en línea");
+  } else {
+   // Muestra el texto
+   if (isTextElementValid) {
+    textElement.style.display = "";
+   }
+
+   // 4. Transforma o prepara el contenedor y crea el QR
+   if (qrElement.nodeName === "IMG") {
+    const facturaUrl = getFacturaUrl(qrElement);
+
+    const newDiv = document.createElement("div");
+    newDiv.id = qrElement.id;
+    newDiv.className = qrElement.className;
+    newDiv.style.display = "";
+
+    qrElement.parentNode.replaceChild(newDiv, qrElement);
+    qrElement = newDiv;
+
+    generateAndShowQR(qrElement, facturaUrl);
+   } else if (qrElement.nodeName === "DIV") {
+    const facturaUrl = getFacturaUrl(qrElement);
+    qrElement.style.display = "";
+    generateAndShowQR(qrElement, facturaUrl);
+   }
+
+   //console.log("🔴 POS sin conexión");
+  }
+ }
+
+ //Es básicamente el hook que llama a la funcion para adaptar la visibilidad cuando se crea un nuevo recibo
+ const observer = new MutationObserver((mutations) => {
+  for (const mutation of mutations) {
+   for (const node of mutation.addedNodes) {
+    if (node.nodeType === 1 && node.querySelector?.(".pos-receipt")) {
+     setTimeout(updateOfflineElementsVisibility, 50);
     }
     return null;
 }
@@ -172,4 +253,5 @@ export function adaptQRForPrint(receipt, isOfflineForced) {
     window.addEventListener("online", updateOfflineElementsVisibility);
     window.addEventListener("offline", updateOfflineElementsVisibility);
     setTimeout(updateOfflineElementsVisibility, 100);
+})();
 })();
