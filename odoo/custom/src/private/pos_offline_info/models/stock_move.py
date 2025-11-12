@@ -3,6 +3,14 @@ from odoo import api, fields, models
 import logging
 _logger = logging.getLogger(__name__)
 
+class StockPicking(models.Model):
+    _inherit = "stock.picking"
+
+    pos_src_cross_store_ok = fields.Boolean(
+        string="POS cross-store OK",
+        help="Permite servir desde otra tienda/ubicación sin forzar la raíz del POS."
+    )
+
 class StockMove(models.Model):
     _inherit = "stock.move"
 
@@ -10,7 +18,7 @@ class StockMove(models.Model):
         "pos.order.line",
         string="POS Order Line",
         index=True, readonly=True, ondelete="set null",
-        help="Línea de pedido TPV que originó este movimiento.",
+        help="Línea de TPV que originó este movimiento.",
     )
 
     def _pos_src_line_and_loc(self):
@@ -27,7 +35,6 @@ class StockMove(models.Model):
         return line, loc
 
     def _pos_src_get_allowed_ids(self, picking):
-        """Devuelve set(ids) de ubicaciones internas bajo la raíz del picking del TPV."""
         if not picking or picking.picking_type_id.code != "outgoing":
             return set(), None
         root = picking.picking_type_id.default_location_src_id
@@ -41,25 +48,30 @@ class StockMove(models.Model):
 
     def _pos_src_enforce_location(self):
         for move in self:
+            # 1) Nunca tocar moves ya cerrados
+            if move.state == "done":
+                _logger.info("POS SRC SKIP: move=%s ya está done", move.id)
+                continue
+
+            # 2) Si la línea del TPV trae una ubicación explícita, se usa SIEMPRE
             line, loc = move._pos_src_line_and_loc()
+            if line and loc:
+                if move.location_id != loc:
+                    if move.state in ("assigned", "partially_available"):
+                        move._do_unreserve()
+                    move.location_id = loc.id
+                    move.move_line_ids.write({"location_id": loc.id})
+                    _logger.info("POS SRC BYPASS: move %s -> %s (desde pos_src_location_id)", move.id, loc.display_name)
+                continue  # no comprobamos árbol ni raíz del POS
 
-            if line and not move.pos_order_line_id:
-                move.pos_order_line_id = line.id
-
+            # 3) Sin ubicación explícita, comportamiento anterior (mismo árbol que el POS)
             allowed_ids, root = self._pos_src_get_allowed_ids(move.picking_id)
-            if loc and allowed_ids and loc.id not in allowed_ids:
-                _logger.info("POS SRC GUARD: loc %s no permitida; forzando raíz %s",
-                             loc.display_name, root and root.display_name)
-                loc = root
-
-            _logger.info("POS SRC ENFORCE? move=%s state=%s line=%s loc=%s",
-                         move.id, move.state, line and line.id, loc and loc.complete_name)
-            if loc and getattr(loc, "usage", None) == "internal" and move.location_id != loc:
+            if allowed_ids and move.location_id.id not in allowed_ids and root:
                 if move.state in ("assigned", "partially_available"):
                     move._do_unreserve()
-                move.location_id = loc.id
-                move.move_line_ids.write({"location_id": loc.id})
-                _logger.info("POS SRC ENFORCED: move %s -> %s", move.id, loc.display_name)
+                move.location_id = root.id
+                move.move_line_ids.write({"location_id": root.id})
+                _logger.info("POS SRC GUARD (fallback): move %s -> %s", move.id, root.display_name)
 
     @api.model_create_multi
     def create(self, vals_list):

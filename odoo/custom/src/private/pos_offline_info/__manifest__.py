@@ -1,7 +1,7 @@
 # __manifest__.py
 {
     "name": "POS Offline Product Info",
-    "version": "17.0.1.0.118",  # bump para recompilar assets
+    "version": "17.0.1.0.119",  # bump para recompilar assets
     "depends": ["point_of_sale", "stock", "pos_stock_where", "pos_restrict_stock_wh"],
     "author": "Alvaro Casti Soto",
     "license": "LGPL-3",
@@ -32,9 +32,8 @@
             # 6) Info de producto (cache + endurecido)
             "pos_offline_info/static/src/js/patch_getproductinfo.js",
             "pos_offline_info/static/src/js/product_info_patch.js",
-        ],
-        "web.assets_qweb": [
-            "pos_offline_info/static/src/xml/product_info_where.xml",
+            "pos_offline_info/static/src/js/offline_heartbeat.js",
+            "pos_offline_info/static/src/css/offline_banner.css",
         ],
     },
     "installable": True,
