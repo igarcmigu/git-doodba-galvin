@@ -9,8 +9,8 @@
   "assets": {
     "point_of_sale._assets_pos": [
       "pos_stock_where/static/src/js/where_buttons.js",
-      "pos_stock_where/static/src/xml/where_templates.xml",
-      "pos_stock_where/static/src/css/where.css",
+    #   "pos_stock_where/static/src/xml/where_templates.xml",
+    #   "pos_stock_where/static/src/css/where.css",
     ],
   },
   "installable": True,

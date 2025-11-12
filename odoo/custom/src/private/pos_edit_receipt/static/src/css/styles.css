@@ -47,3 +47,14 @@ div#posqrcode {
     display: flex;
     justify-content: center;
 }
+
+.pos-receipt-container {
+    justify-content: center !important;
+}
+
+@media print {
+    .pos-receipt {
+        width: 80mm !important; /* Ajusta el ancho de tu papel */
+        margin: 0 auto !important; /* Centra el bloque */
+    }
+}

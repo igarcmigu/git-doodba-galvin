@@ -1,48 +1,28 @@
 /** @odoo-module **/
 
-// console.log("test_conexion cargado");
+//console.log("test_conexion cargado");
 
-(function waitForPOSRoot() {
-    // Verifica si ha cargado la libreria que se usará para generar el QR en el navegador
-    if (typeof QRCode === "undefined") {
-        // Console.error("Error: La librería qrcode.min.js no se ha cargado correctamente.");
-        return setTimeout(waitForPOSRoot, 500);
-    }
 
-    // Espera a que exista el elemento DOM principal del POS
-    const posRoot = document.querySelector(".pos");
-    if (!posRoot) {
-        return setTimeout(waitForPOSRoot, 500);
-    }
+const QR_ELEMENT_SELECTOR = "#posqrcode";
+const TEXT_BLOCK_CLASS = ".pos-receipt-order-data";
 
-    // Identificador del contenedor de texto y QR
-    const QR_ELEMENT_SELECTOR = "#posqrcode";
-    const TEXT_BLOCK_CLASS = ".pos-receipt-order-data";
 
-    // Extrae la URL de la factura del DOM usando de referencia el atributo src
-    function getFacturaUrl(qrElement) {
-        let facturaUrl = null;
-
-        // Comprueba que existe el QR
-        if (qrElement && qrElement.nodeName === "IMG") {
-            // Intentar obtener la URL desde el atributo src
-            const srcUrl = qrElement.getAttribute("src");
-            if (srcUrl) {
-                // La URL está codificada (URL-encoded)
-                // Busca la URL que está justo después de '/QR/' y antes de '?' o el final.
-                const match = srcUrl.match(/\/QR\/([^?]+)/);
-
-                if (match && match[1]) {
-                    // El grupo 1 contiene la URL codificada. Usamos decodeURIComponent para limpiarla.
-                    facturaUrl = decodeURIComponent(match[1]);
-                    return facturaUrl;
-                }
+function getFacturaUrl(qrElement) {
+    let facturaUrl = null;
+    if (qrElement && qrElement.nodeName === "IMG") {
+        const srcUrl = qrElement.getAttribute("src");
+        if (srcUrl) {
+            const match = srcUrl.match(/\/QR\/([^?]+)/);
+            if (match && match[1]) {
+                facturaUrl = decodeURIComponent(match[1]);
+                return facturaUrl;
             }
         }
+    }
 
-        // Por si hubiese algún problema puede pillar la url base del formulario de crear factura
-        // Simplemente en vez de tener los campos autocompletados tendría que cubrirlos manualmente con los dato presentes en el recibo
-        const allData = document.querySelectorAll(TEXT_BLOCK_CLASS);
+    const receipt = qrElement.closest(".pos-receipt");
+    if (receipt) {
+        const allData = receipt.querySelectorAll(TEXT_BLOCK_CLASS);
         let linkText;
         allData.forEach((el) => {
             if (el.textContent.includes("http")) {
@@ -53,49 +33,77 @@
             const urlMatch = linkText.match(/(https?:\/\/[^\s]+)/);
             return urlMatch ? urlMatch[0] : null;
         }
-
-        return null;
     }
+    return null;
+}
 
-    // Genera el código QR de forma local
-    function generateAndShowQR(qrContainer, facturaUrl) {
-        qrContainer.innerHTML = "";
-        if (!facturaUrl) {
-            // Console.log("No se encontró la URL de la factura para generar el QR.");
-            return;
-        }
-        const qrDiv = document.createElement("div");
-        qrContainer.appendChild(qrDiv);
-
-        try {
-            new QRCode(qrDiv, {
-                text: facturaUrl,
-                width: 180,
-                height: 180,
-                colorDark: "#000000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H,
-            });
-            // //console.log("✅ QR de factura generado localmente.");
-        } catch (e) {
-            // Console.error("❌ Error al generar el QR con la librería:", e);
-        }
+export function generateAndShowQR(qrContainer, facturaUrl) {
+    if (typeof QRCode === "undefined") {
+        console.error("Error: La librería qrcode.min.js no se ha cargado correctamente.");
+        return;
     }
+    qrContainer.innerHTML = "";
+    if (!facturaUrl) {
+        return;
+    }
+    const qrDiv = document.createElement("div");
+    qrContainer.appendChild(qrDiv);
+    try {
+        new QRCode(qrDiv, {
+            text: facturaUrl,
+            width: 180,
+            height: 180,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H,
+        });
+    } catch (e) {
+        console.error("❌ Error al generar el QR con la librería:", e);
+    }
+}
 
-    // Comprueba si el servidor de Odoo es realmente accesible como check extra de conexion
+
+export function adaptQRForPrint(receipt, isOfflineForced) {
+    let qrElement = receipt.querySelector(QR_ELEMENT_SELECTOR);
+    if (!qrElement) return;
+    const textElement = qrElement.previousElementSibling;
+    const isTextElementValid =
+        textElement && textElement.classList.contains(TEXT_BLOCK_CLASS.replace(".", ""));
+    if (isOfflineForced) {
+        const facturaUrl = getFacturaUrl(qrElement);
+        if (isTextElementValid) {
+            textElement.style.display = "";
+        }
+        let newQrElement = qrElement;
+        if (qrElement.nodeName === "IMG") {
+            newQrElement = document.createElement("div");
+            newQrElement.id = qrElement.id;
+            newQrElement.className = qrElement.className;
+            newQrElement.style.display = ""; // Asegura visibilidad
+
+            qrElement.parentNode.replaceChild(newQrElement, qrElement);
+            qrElement = newQrElement;
+
+        } else if (qrElement.nodeName === "DIV") {
+            qrElement.style.display = "";
+        }
+        generateAndShowQR(qrElement, facturaUrl);
+
+    } else {
+        if (isTextElementValid) {
+            textElement.remove();
+        }
+        qrElement.remove();
+    }
+}
+
+
+(function setupOfflineObserver() {
     async function isOdooReachable() {
-        // 🛑 V25: NEUTRALIZACIÓN PARA EL MODO OFFLINE FORZADO
-        if (
-            window.posOfflineDataHandler &&
-            window.posOfflineDataHandler.isOfflineModeActive
-        ) {
-            console.warn(
-                "🟢 CUSTOM SCRIPT: isOdooReachable neutralizado (Modo Offline Forzado)."
-            );
-            return false; // Evita la llamada de red y el error
+        if (window.posOfflineDataHandler && window.posOfflineDataHandler.isOfflineModeActive) {
+            console.warn("🟢 CUSTOM SCRIPT: isOdooReachable neutralizado (Modo Offline Forzado).");
+            return false;
         }
-
-        // Lógica original de intento de conexión
         try {
             const response = await fetch("/web", {
                 method: "GET",
@@ -109,42 +117,27 @@
     }
 
     async function updateOfflineElementsVisibility() {
-        // Comprueba si hay conexion a nivel local y si es accesible el servidor
         let isOnline = navigator.onLine;
         if (isOnline) {
             const reachable = await isOdooReachable();
             if (!reachable) isOnline = false;
         }
-
-        // Se sacan y validan los elementos a ocultar
-
         let qrElement = document.querySelector(QR_ELEMENT_SELECTOR);
         if (!qrElement) return;
-
         const textElement = qrElement.previousElementSibling;
         const isTextElementValid =
-            textElement &&
-            textElement.classList.contains(TEXT_BLOCK_CLASS.replace(".", ""));
-
-        // Si se confirma que está online oculta el QR y el mensaje de escanear
+            textElement && textElement.classList.contains(TEXT_BLOCK_CLASS.replace(".", ""));
         if (isOnline) {
             qrElement.style.display = "none";
-
             if (isTextElementValid) {
                 textElement.style.display = "none";
             }
-
-            // Console.log("🟢 POS en línea");
         } else {
-            // Muestra el texto
             if (isTextElementValid) {
                 textElement.style.display = "";
             }
-
-            // 4. Transforma o prepara el contenedor y crea el QR
             if (qrElement.nodeName === "IMG") {
                 const facturaUrl = getFacturaUrl(qrElement);
-
                 const newDiv = document.createElement("div");
                 newDiv.id = qrElement.id;
                 newDiv.className = qrElement.className;
@@ -152,19 +145,19 @@
 
                 qrElement.parentNode.replaceChild(newDiv, qrElement);
                 qrElement = newDiv;
-
                 generateAndShowQR(qrElement, facturaUrl);
             } else if (qrElement.nodeName === "DIV") {
                 const facturaUrl = getFacturaUrl(qrElement);
                 qrElement.style.display = "";
                 generateAndShowQR(qrElement, facturaUrl);
             }
-
-            // Console.log("🔴 POS sin conexión");
         }
     }
 
-    // Es básicamente el hook que llama a la funcion para adaptar la visibilidad cuando se crea un nuevo recibo
+    const posRoot = document.querySelector(".pos");
+    if (!posRoot) return setTimeout(setupOfflineObserver, 500);
+    if (typeof QRCode === "undefined") return setTimeout(setupOfflineObserver, 500);
+
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
             for (const node of mutation.addedNodes) {
@@ -175,13 +168,8 @@
         }
     });
 
-    // Vigila todo el DOM del POS
-    observer.observe(posRoot, {childList: true, subtree: true});
-
-    // Son los checks de que se haya recuperado o perdido la conexion
+    observer.observe(posRoot, { childList: true, subtree: true });
     window.addEventListener("online", updateOfflineElementsVisibility);
     window.addEventListener("offline", updateOfflineElementsVisibility);
-
-    // Establece el estado inicial
     setTimeout(updateOfflineElementsVisibility, 100);
 })();
