@@ -2,335 +2,430 @@
 
 import { PosStore } from "@point_of_sale/app/store/pos_store";
 import { patch } from "@web/core/utils/patch";
-import { PosDB } from "@point_of_sale/app/store/db";
 
+/*  Valores constantes de referencia a la base de datos. */
 const DB_NAME = "POS_Order";
 const STORE_NAME = "store1";
 const DB_VERSION = 1;
 
-const _dbAddOrder   = PosDB.prototype.add_order;
-
-const _setup        = PosStore.prototype.setup;
-const _pushOrders   = PosStore.prototype.push_orders;
-const _saveToServer = PosStore.prototype._save_to_server;
-const _flushOrders  = PosStore.prototype._flush_orders;
-
-function isOfflineLike(errOrMsg) {
-  const msg = String(errOrMsg?.message ?? errOrMsg ?? "");
-  return (
-    !navigator.onLine ||
-    window.__pos_rpc_down__ ||
-    /XmlHttpRequestError|NetworkError|Failed to fetch|Connection|timeout/i.test(msg)
-  );
-}
-function log(...a){ try{ console.log("[pos_offline_db]", ...a); }catch{} }
-function warn(...a){ try{ console.warn("[pos_offline_db]", ...a); }catch{} }
-function error(...a){ try{ console.error("[pos_offline_db]", ...a); }catch{} }
-
-function purgePosLocalStorage(dbName) {
-  try {
-    const prefix = dbName + "_";
-    const toDel = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (!k) continue;
-      if (
-        k.startsWith(prefix) ||
-        k === "posdb" ||
-        k.includes("_orders") ||
-        k.includes("_pending_operations")
-      ) {
-        toDel.push(k);
-      }
-    }
-    for (const k of toDel) localStorage.removeItem(k);
-    log("LocalStorage purgado:", toDel);
-  } catch (e) { warn("purgePosLocalStorage err:", e); }
-}
-
-function clearPosOfflineReservations(pos) {
-  try {
-    const user = pos?.env?.services?.user;
-    const db = user?.context?.db || "";
-    const cmp = pos?.config?.company_id?.[0] || "0";
-    const cfg = pos?.config?.id || "0";
-    localStorage.removeItem(`POS_OFFLINE_INFO/v17/${db}/${cmp}/${cfg}/reservations`);
-  } catch {}
-}
-
-function getIndexedDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "id" });
-      }
-    };
-    req.onsuccess = (e) => resolve(e.target.result);
-    req.onerror   = (e) => reject(e.target.error);
-  });
-}
-
-async function saveToIndexedDB(orders) {
-  const db = await getIndexedDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_NAME], "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-    let ok = 0;
-
-    orders.forEach((o) => {
-      const uid  = o?.uid || o?.data?.uid;
-      const data = o?.data || (o?.export_as_JSON ? o.export_as_JSON() : {});
-      if (!uid) { error("UID ausente; no se guarda:", o); return; }
-      const rec = { id: uid, uid, data };
-      const put = store.put(rec);
-      put.onsuccess = () => { ok++; };
-      put.onerror   = (e) => error("IndexedDB put error:", e?.target?.error);
-    });
-
-    tx.oncomplete = () => { log(`Guardadas en IndexedDB: ${ok}/${orders.length}`); resolve(); };
-    tx.onerror    = (e) => { error("IndexedDB tx error:", e); reject(e); };
-  });
-}
-
-async function getAllFromIndexedDB() {
-  const db = await getIndexedDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_NAME], "readonly");
-    const store = tx.objectStore(STORE_NAME);
-    const out = [];
-    store.openCursor().onsuccess = (ev) => {
-      const c = ev.target.result;
-      if (c) { out.push(c.value); c.continue(); } else resolve(out);
-    };
-    tx.onerror = (e) => reject(e);
-  });
-}
-
-async function clearIndexedDB() {
-  const db = await getIndexedDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE_NAME], "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-    const clr = store.clear();
-    clr.onsuccess = resolve;
-    clr.onerror   = reject;
-  });
-}
-
-function orderToJSON(o) {
-  if (o?.data) return o.data;
-  if (typeof o?.export_as_JSON === "function") {
-    try { return o.export_as_JSON() || {}; } catch {}
-  }
-  // 3) otras convenciones
-  if (typeof o?.toJSON === "function") {
-    try { return o.toJSON() || {}; } catch {}
-  }
-  if (typeof o?.get_order_json === "function") {
-    try { return o.get_order_json() || {}; } catch {}
-  }
-  if (o && typeof o === "object" && (
-    Array.isArray(o.lines) || "amount_total" in o || "amount_paid" in o || "name" in o || "uid" in o
-  )) return o;
-  return {};
-}
-
-function ensureOrdersArrayWithData(orders) {
-  return (Array.isArray(orders) ? orders : [])
-    .filter(() => true)
-    .map((o) => {
-      const data = orderToJSON(o);
-      const uid =
-        o?.uid ||
-        data?.uid ||
-        data?.id ||
-        (data?.name ? String(data.name) : null);
-      const id = o?.id || uid;
-      return { id, uid, data, export_as_JSON: () => data || {} };
-    })
-    .filter((x) => !!x.uid && !!x.data && (
-      (Array.isArray(x.data.lines) && x.data.lines.length > 0) || Number(x.data.amount_total || 0) > 0
-    ));
-}
-
-function reconstructFromCurrentPos(pos) {
-  try {
-    const cur = pos?.get_order?.();
-    if (!cur) return null;
-    const data = orderToJSON(cur);
-    const uid = data?.uid || cur?.uid || data?.id || data?.name;
-    const id  = uid;
-    // Evita pedidos “en blanco”
-    const hasLines = Array.isArray(data?.lines) && data.lines.length > 0;
-    const total = Number(data?.amount_total || 0);
-    if (!uid || (!hasLines && total === 0)) return null;
-    return { id, uid, data, export_as_JSON: () => data };
-  } catch (e) {
-    warn("reconstructFromCurrentPos err:", e);
-    return null;
-  }
-}
-
-async function moveOrdersToIndexedDBAndPurge(pos, orders, reason) {
-  try {
-    let prepared = ensureOrdersArrayWithData(orders);
-
-    if (!prepared.length) {
-      const rec = reconstructFromCurrentPos(pos);
-      if (rec) {
-        prepared = [rec];
-        log("Fallback aplicado: reconstruido pedido actual para IndexedDB →", rec.uid);
-      }
-    }
-
-    if (!prepared.length) {
-      warn("moveOrdersToIndexedDBAndPurge: no hay órdenes válidas. reason=", reason);
-      return;
-    }
-
-    await saveToIndexedDB(prepared);
-
-    try {
-      for (const x of prepared) { try { pos.db.remove_order(x.uid); } catch {} }
-    } catch (e) { warn("remove_order batch err:", e); }
-
-    purgePosLocalStorage(pos.db.name);
-    clearPosOfflineReservations(pos);
-    log(`Pedidos movidos a IndexedDB (${prepared.length}) por: ${reason}`);
-  } catch (e) {
-    error("moveOrdersToIndexedDBAndPurge fatal:", e);
-  }
-}
+/*  Guardamos la referencia del método original de _flush_orders. */
+const FLUSH_ORDERS = PosStore.prototype._flush_orders;
 
 patch(PosStore.prototype, {
-  async setup() {
-    const res = _setup ? await _setup.apply(this, arguments) : undefined;
-    log("PATCH ACTIVO (setup)");
 
-    if (!this.__offline_sync_bound__) {
-      this.__offline_sync_bound__ = true;
-      window.addEventListener("online", async () => {
-        try { await this.push_orders?.(); } catch {}
-        try { await this.sync_offline_orders?.(); } catch {}
-      });
-    }
+    /*  Sobrescritura del setup, para cuando esté online, 
+        use sync_offline_orders para sicronizar los datos. */
+    async setup(...args) {
 
-    try { await this.sync_offline_orders?.(); } catch {}
-    return res;
-  },
+        // Sobrescribe el método setup.
+        await super.setup(...args);
 
-  async push_orders() {
-    log("push_orders interceptados");
-    try {
-      return _pushOrders ? await _pushOrders.apply(this, arguments) : undefined;
-    } catch (err) {
-      if (!isOfflineLike(err)) throw err;
-      warn("push_orders OFFLINE → no se pudo enviar. (Se gestionará en _save_to_server/_flush_orders)");
-      throw err;
-    }
-  },
+        try {
+            // Exponemos el pos_store en window para facilitar el acceso a otros scripts.
+            window.pos_store = this;
+            console.log("✅ pos_store expuesto en window.pos_store");
+        } catch (e) {
+            console.warn("No se pudo exponer pos_store:", e);
+        }
 
-  async _save_to_server(orders) {
-    const len = Array.isArray(orders) ? orders.length : 0;
-    log("_save_to_server interceptado", { len });
-    if (!len) return { successful: [], failed: [] };
+        console.log("PosStore: Configurando sincronización de pedidos offline...");
 
-    try {
-      const res = _saveToServer ? await _saveToServer.apply(this, arguments) : { successful: [], failed: [] };
-      const failed = Array.isArray(res?.failed) ? res.failed : [];
-      if (failed.length || isOfflineLike(res?.message)) {
-        warn("_save_to_server → fallidos, moviendo a IndexedDB");
-        await moveOrdersToIndexedDBAndPurge(this, orders, "_save_to_server failed");
-        const pre = ensureOrdersArrayWithData(orders);
-        return { successful: pre.map(o => ({ id: o.id, uid: o.uid })), failed: [] };
-      }
-      return res;
-    } catch (err) {
-      if (!isOfflineLike(err)) throw err;
-      warn("_save_to_server OFFLINE → IndexedDB");
-      await moveOrdersToIndexedDBAndPurge(this, orders, "_save_to_server exception");
-      const pre = ensureOrdersArrayWithData(orders);
-      return { successful: pre.map(o => ({ id: o.id, uid: o.uid })), failed: [] };
-    }
-  },
+        // Añadimos un evento al setup, que enlaza el setup
+        // con la función sync_offline_orders.
+        window.addEventListener('online', this.sync_offline_orders.bind(this));
 
-  async _flush_orders(orders, options) {
-    const len = Array.isArray(orders) ? orders.length : 0;
-    log("_flush_orders interceptado", { len });
-    if (!len) return { successful: [], failed: [] };
+        // Ejecuta la sincronización.
+        this.sync_offline_orders();
 
-    try {
-      const res = _flushOrders ? await _flushOrders.apply(this, arguments) : { successful: [], failed: [] };
-      const failed = Array.isArray(res?.failed) ? res.failed : [];
-      if (failed.length || isOfflineLike(res?.message)) {
-        warn("_flush_orders → fallidos, moviendo a IndexedDB");
-        await moveOrdersToIndexedDBAndPurge(this, orders, "_flush_orders failed");
-        const pre = ensureOrdersArrayWithData(orders);
-        return { successful: pre.map(o => ({ id: o.id, uid: o.uid })), failed: [] };
-      }
-      return res;
-    } catch (err) {
-      if (!isOfflineLike(err)) throw err;
-      warn("_flush_orders OFFLINE → IndexedDB");
-      await moveOrdersToIndexedDBAndPurge(this, orders, "_flush_orders exception");
-      const pre = ensureOrdersArrayWithData(orders);
-      return { successful: pre.map(o => ({ id: o.id, uid: o.uid })), failed: [] };
-    }
-  },
+    },
 
-  async sync_offline_orders() {
-    const pending = await getAllFromIndexedDB();
-    if (!pending.length) { log("IndexedDB vacío."); return; }
+    /*  Sobre escritura de sync_offline_orders, 
+        coge todos los pedidos sin sicronizar y los sincroniza. */
+    async sync_offline_orders() {
 
-    log(`sync_offline_orders: ${pending.length} pendientes`);
 
-    const prepared = pending.map((r) => ({
-      ...r,
-      id: r.uid,
-      export_as_JSON: () => r.data,
-    }));
+        // Crea una constante de todos los pedidos que se obtienen del indexedDB.
+        const offline_orders = await _get_orders_from_indexeddb()
 
-    let uploadedAny = false;
-    for (const order of prepared) {
-      try {
-        this.db.add_order(order);
-        if (_flushOrders) await _flushOrders.apply(this, [[order], { timeout: 5, shadow: false }]);
-        uploadedAny = true;
-      } catch (e) {
-        if (isOfflineLike(e)) { warn("Sigue offline durante sync."); break; }
-        error("Error servidor en sync:", e);
-      }
-    }
+        // Verificamos cuantos pedidos son.
+        await check_offline_orders(offline_orders)
 
-    if (uploadedAny) {
-      for (const o of prepared) { try { this.db.remove_order(o.id); } catch {} }
-      await clearIndexedDB();
-      clearPosOfflineReservations(this);
-      purgePosLocalStorage(this.db.name);
-      log("Sync completada. IndexedDB limpiado y LocalStorage purgado.");
-    }
-  },
+        // Prepara los pedidos para _flush_orders: asegura el id y añade export_as_JSON.
+        const orders_to_sync = offline_orders.map(order_data => ({
+            ...order_data,
+            id: order_data.uid,
+            export_as_JSON: () => order_data.data,
+        }));
+
+        let result = false;
+
+        // Si no hay pedidos, sale de la función.
+        if (offline_orders.length === 0) {
+            console.log("No hay pedidos para sincronizar.");
+            return;
+        }
+
+        // Si la sincronización es manual, con el botón,
+        // intenta sincronizar todos los pedidos sin límite de tiempo.
+        if (window.manual_sync_in_progress) {
+            try {
+                await sync_orders(orders_to_sync, result, this, offline_orders);
+            } catch (error) {
+                console.error("Error durante la sincronización manual de pedidos offline:", error);
+            } finally {
+                window.manual_sync_in_progress = false;
+            }
+
+            // Si la sincronización es automática, usa un límite de tiempo.
+        } else {
+
+            let tiempo = await time_sync();
+
+            console.log(`Iniciando sincronización durante ${tiempo / 1000} segundos...`);
+            try {
+
+                // Marca el tiempo de inicio.
+                const inicio = Date.now();
+                sincronizar: while ((true)) {
+                    // Procesamos mientras haya pedidos en la cola, evitando mutar
+                    // el array durante una iteración for-of.
+                    while (orders_to_sync.length > 0) {
+                        // Comprueba si se ha superado el tiempo máximo de sincronización.
+                        const ahora = Date.now() - inicio;
+                        if (ahora >= tiempo) {
+                            console.log("Tiempo máximo de sincronización alcanzado.");
+                            break sincronizar;
+                        }
+
+                        // Toma siempre el primer pedido de la cola.
+                        const order = orders_to_sync[0];
+                        try {
+
+                            // Sincroniza el pedido.
+                            await sync_orders(orders_to_sync, result, this, offline_orders);
+
+                        } catch (error) {
+                            console.warn(`Error al sincronizar pedido ${order && order.uid}:`, error);
+                            // En caso de error de red o servidor, salimos para reintentar más tarde.
+                            break sincronizar;
+                        }
+                    }
+                    // Después de intentar sincronizar todos los pedidos,
+                    // comprobamos si quedan pedidos pendientes.
+                    const pendientes = await _get_orders_from_indexeddb();
+                    // Si no quedan pedidos, salimos del bucle y volvemos a modo online.
+                    if (pendientes.length === 0) {
+                        console.log("Todos los pedidos sincronizados. Volviendo a modo online.");
+                        // Dispara el evento 'online' para notificar el cambio de estado.
+                        window.dispatchEvent(new Event('online'));
+                        break;
+                    } else { // Si quedan pedidos, mantenemos el modo offline.
+                        console.log(`Quedan ${pendientes.length} pedidos en cola. Se mantiene modo offline.`);
+                        break sincronizar;
+                    }
+                }
+                // Si no se han sincronizado todos los pedidos,
+                // programa un nuevo intento en 30 minutos.
+                if ((await _get_orders_from_indexeddb()).length > 0) {
+                    console.log("Reintentando sincronización en 30 minutos...");
+                    setTimeout(() => {
+                        this.sync_offline_orders();
+                    }, 30 * 60 * 1000);
+                }
+            } catch (error) {
+                console.error("Error durante la sincronización de pedidos offline:", error);
+                setTimeout(() => {
+                    this.sync_offline_orders();
+                }, 30 * 60 * 1000);
+            }
+        }
+    },
+
+    /*  Sobrescritura de _flush_orders, intenta subir la orden, 
+        sino hay conexión, usa el indexedDB para guardar los pedidos. */
+    async _flush_orders(orders, options) {
+        try {
+
+            // Comprobamos si hay pedidos pendientes en IndexedDB
+            const pendientes = await _get_orders_from_indexeddb();
+
+            if (pendientes.length > 0) {
+                console.warn(`Hay ${pendientes.length} pedidos pendientes. Forzando modo offline.`);
+
+                // Forzamos modo offline antes de intentar nada.
+                window.dispatchEvent(new Event('offline'));
+
+                // Guardamos los pedidos nuevos también en IndexedDB.
+                await _save_orders_to_indexeddb(orders);
+
+                // Limpiamos cache local de Odoo.
+                await del_odoo_local(orders, this);
+
+                // Devolvemos como si se hubiera guardado correctamente.
+                return { successful: orders.map(o => ({ id: o.id, uid: o.uid })), failed: [] };
+            }
+
+            // Si hay conexión, envia los pedidos de manera habitual.
+            return await super._flush_orders(orders, options)
+
+        } catch (error) {
+            // Si el error es de conexión.
+            if (error.message.includes('Connection') || error.message.includes('Network')) {
+
+                console.warn("Conexión perdida. Guardando pedidos en IndexedDB.");
+
+                // Guarda los pedidos en el indexedDB.
+                await _save_orders_to_indexeddb(orders);
+
+                // Borra las refernecias de local,
+                // para evitar que haya no se sature
+                // la memoria limitada del localstorage.
+                await del_odoo_local(orders, this);
+
+                // Forzamos el modo offline.
+                window.dispatchEvent(new Event('offline'));
+
+
+                console.log("Pedidos guardados localmente. Se sincronizarán cuando la conexión se restablezca.");
+
+                // Devuelve que ha sido correcto el funcionamiento.
+                return {
+                    successful: orders.map(o => ({ id: o.id, uid: o.uid })),
+                    failed: []
+                };
+            } else {
+                throw error;
+            }
+        }
+    },
+    // Hacemos público el método get_offline_orders
+    async get_offline_orders() {
+        return await _get_orders_from_indexeddb();
+    },
+    // Hacemos público el método clear_indexeddb_orders
+    async _clear_indexeddb_orders(uid) {
+        return await _clear_indexeddb_orders(uid);
+    },
 });
 
-patch(PosDB.prototype, {
-  add_order(order) {
+/*  Se utiliza para obtener todas las ordenes 
+    que están en indexedDB. */
+async function _get_orders_from_indexeddb() {
     try {
-      const json = orderToJSON(order);
-      const hasLines = Array.isArray(json?.lines) && json.lines.length > 0;
-      const total = Number(json?.amount_total || 0);
-      const isBlank = !hasLines && total === 0;
+        // Coge la referencia de la base de datos.
+        const db = await getIndexedDB();
+        return new Promise((resolve, reject) => {
 
-      if (isBlank) {
-        console.log("[pos_offline_db] add_order: pedido en blanco NO persistido:", json?.uid || order?.uid);
-        return; 
-      }
+            // Comienza una transacción en la base de datos.
+            const transaction = db.transaction([STORE_NAME], "readonly");
+            const store = transaction.objectStore(STORE_NAME);
+
+            // Creamos una lista que va a ser 
+            // todos los pedidos de la base de datos.
+            const orders = [];
+
+            // Usamos un cursor que va leyendo todos los pedidos 
+            // y los va añadiendo a la lista, cuando no quedan, 
+            // resulve la transacción.
+            store.openCursor().onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    orders.push(cursor.value);
+                    cursor.continue();
+                } else {
+                    resolve(orders);
+                }
+            };
+
+            // Si da error, aborta la transacción.
+            transaction.onerror = (e) => {
+                console.error("Error al recuperar de la BD");
+                reject(e);
+            };
+        });
     } catch (e) {
-      console.warn("[pos_offline_db] add_order guard:", e);
+        console.error("Fallo crítico al acceder o guardar en IndexedDB:", e);
+        throw new Error("IndexedDB get failed.");
     }
-    return _dbAddOrder.apply(this, arguments);
-  },
-});
+}
 
-log("PATCH CARGADO (pos_offline.js)");
+/*  Función que obtiene la base de datos para poder modificarla. */
+function getIndexedDB() {
+    return new Promise((resolve, reject) => {
+        // Abre la base de datos que está en indexedDB.
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+        // Asignamos la id de la base de datos, para poder borrar uno a uno.
+        request.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            if (!db.objectStoreNames.contains(STORE_NAME)) {
+                db.createObjectStore(STORE_NAME, { keyPath: 'uid' });
+            }
+        };
+
+        // Sino da error, resuelve la request.
+        request.onsuccess = (e) => resolve(e.target.result)
+
+        // Si da error, aborta el intento de entrar.
+        request.onerror = (e) => {
+            console.error("Error al abrir IndexedDB:", e.target.error);
+            reject(e.target.error)
+        }
+    });
+}
+
+/*  Función usada para contar el número de ordenes offline que hay. */
+async function check_offline_orders(offline_orders) {
+    console.log("Comprobando conexión y pedidos pendientes en IndexedDB...");
+
+    // Comprueba que haya al menos un pedido.
+    if (offline_orders.length === 0) {
+        console.log("No hay pedidos pendientes en IndexedDB.");
+        return;
+    }
+
+    // Imprimir el número de pedidos que hay.
+    console.log(`Encontrados ${offline_orders.length} pedidos pendientes en IndexedDB. Intentando sincronizar...`);
+}
+
+/*  Se utiliza para borrar los datos que del indexedDB
+    en el momento que se sincronizan con la base de datos de odoo. */
+async function _clear_indexeddb_orders(uid) {
+    try {
+        // Coge la referencia de la base de datos.
+        const db = await getIndexedDB();
+        return new Promise((resolve, reject) => {
+            // Comienza una transacción a la tabla de la base.
+            const transaction = db.transaction([STORE_NAME], "readwrite");
+            const store = transaction.objectStore(STORE_NAME);
+
+            // Elimina solo el registro con id ese id
+            const clearRequest = store.delete(uid);
+
+            // Sino da error, resuelve la transacción.
+            clearRequest.onsuccess = () => {
+                console.log(`Pedido con uid ${uid} eliminado de IndexedDB.`);
+                resolve();
+            };
+
+            // Si da error, aborta la transacción.
+            clearRequest.onerror = (e) => {
+                reject(e);
+            };
+        });
+    } catch (e) {
+        console.error("Fallo crítico al acceder o guardar en IndexedDB:", e);
+        throw new Error("IndexedDB clear failed.");
+    }
+}
+
+/*  Función utilizada para guardar las ordenes 
+    cuando no hay conexión en indexedDB. */
+async function _save_orders_to_indexeddb(orders) {
+    try {
+
+        // Coge la referencia de la base de datos.
+        const db = await getIndexedDB();
+        return new Promise((resolve, reject) => {
+
+            // Comienza una transacción a la tabla de la base.
+            const transaction = db.transaction([STORE_NAME], "readwrite");
+            const store = transaction.objectStore(STORE_NAME);
+
+            let orders_indexed = 0;
+            // Por cada pedido que tiene la base de datos, 
+            // guarda la id y sus datos en el indexed.
+            orders.forEach(order => {
+                store.put({ id: order.id, uid: order.uid, data: order.data });
+                orders_indexed++;
+            });
+
+            // Si la transacción se completa, 
+            // pone un log con el numero de ordenes indexadas.
+            transaction.oncomplete = () => {
+                console.log(`Ordenes indexadas:  ${orders_indexed}`);
+                console.log(`Ordenes indexadas:  ${orders.length}`);
+                resolve();
+            };
+
+            // Si la transacción da error, 
+            // aborta la transacción.
+            transaction.onerror = (e) => {
+                console.error("Error al indexar en la BD");
+                reject(e);
+            };
+        });
+    } catch (e) {
+        console.error("Fallo crítico al acceder o guardar en IndexedDB:", e);
+        throw new Error("IndexedDB save failed.");
+    }
+}
+
+/*  Función usada para borrar todos los datos y 
+    referencias que guarda odoo  offline. */
+async function del_odoo_local(orders, posStore) {
+
+    // Un bucle que es utilizado para borrar 
+    // las referencias de la base de datos de odoo.
+    orders.forEach(order => {
+        posStore.db.remove_order(order.uid);
+        console.log(`Pedido ${order.uid} eliminado forzosamente de la BD local de Odoo.`);
+    });
+
+    // Este apartado usa el nombre de paidOrderKey en 
+    // el local storage para borrar esa referencia.
+    const paidOrdersKey = posStore.db.name + '_orders';
+    localStorage.removeItem(paidOrdersKey);
+    console.log(`Clave '${paidOrdersKey}' eliminada del Local Storage.`);
+
+    // Este apartado usa la referencia del pendingOperationsKEt 
+    // para borrarla ene l local storage.
+    const pendingOperationsKey = posStore.db.name + '_pending_operations';
+    localStorage.removeItem(pendingOperationsKey);
+    console.log(`Clave de operaciones pendientes ('${pendingOperationsKey}') eliminada del Local Storage.`);
+}
+
+/*  Función utilizada para usar un timeout para sincronizar con el servidor. */
+async function time_sync() {
+    console.log("Sincronizando hora con el servidor...");
+
+    // Devuelve el tiempo de espera para la sincronización.
+    return new Promise((resolve, reject) => {
+        setTimeout(() => {
+            const time_for_out = 150000; // 150 segundos
+            resolve(time_for_out);
+        }, 1000);
+    });
+}
+
+/*  Función utilizada para sincronizar los pedidos pendientes. */
+async function sync_orders(orders_to_sync, result, context, offline_orders) {
+    while (orders_to_sync.length > 0) {
+
+
+        // Toma siempre el primer pedido de la cola.
+        const order = orders_to_sync[0];
+
+        // Añade el pedido a la base de datos local de odoo.
+        order.uid = order.data.uid;
+        order.id = order.data.uid;
+        context.db.add_order(order);
+
+        // Espera 2 segundos si no es manual, entre cada intento para evitar saturar el servidor.
+        if (!window.manual_sync_in_progress) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        // Intentamos subir el pedido.
+        const subido = await FLUSH_ORDERS.call(context, [order], { timeout: 5, shadow: false });
+        if (subido) { result = true; }
+
+        // Si se sube correctamente, lo borramos del indexedDB y de la base local de odoo.
+        await _clear_indexeddb_orders(order.uid);
+        await Promise.resolve(context.db.remove_order(order.uid));
+
+
+        // Eliminamos el primer elemento de la cola tras éxito.
+        orders_to_sync.shift();
+        offline_orders.shift();
+    }
+}
