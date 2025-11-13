@@ -1,10 +1,11 @@
 # pos_restrict_stock_wh/models/pos_order.py
-# -*- coding: utf-8 -*-
 import logging
+
 from odoo import _, api, models
 from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
+
 
 class PosOrder(models.Model):
     _inherit = "pos.order"
@@ -39,14 +40,21 @@ class PosOrder(models.Model):
         if "lines" in vals:
             new_lines = []
             for cmd in vals["lines"]:
-                if (isinstance(cmd, (list, tuple)) and len(cmd) == 3
-                        and isinstance(cmd[2], dict)):
+                if (
+                    isinstance(cmd, (list, tuple))
+                    and len(cmd) == 3
+                    and isinstance(cmd[2], dict)
+                ):
                     line_vals = dict(cmd[2])
                     # vienen del front como enteros/strings -> Odoo hará el coercion
                     if "pos_src_location_id" in line_vals:
-                        line_vals["pos_src_location_id"] = line_vals["pos_src_location_id"]
+                        line_vals["pos_src_location_id"] = line_vals[
+                            "pos_src_location_id"
+                        ]
                     if "pos_fulfillment_mode" in line_vals:
-                        line_vals["pos_fulfillment_mode"] = line_vals["pos_fulfillment_mode"]
+                        line_vals["pos_fulfillment_mode"] = line_vals[
+                            "pos_fulfillment_mode"
+                        ]
                     new_lines.append([cmd[0], cmd[1], line_vals])
                 else:
                     new_lines.append(cmd)
@@ -83,10 +91,10 @@ class PosOrder(models.Model):
                 missing_names.append(p.display_name)
         if missing_names:
             unique = list(dict.fromkeys(missing_names))
-            unique = list(dict.fromkeys(missing_names))
-
             quoted = '", "'.join(unique)
-            msg = _('Sin stock de: "%(names)s". Comprueba si hay en otras ubicaciones.') % {"names": quoted}
+            msg = _(
+                'Sin stock de: "%(names)s". Comprueba si hay en otras ubicaciones.'
+            ) % {"names": quoted}
             _logger.warning("POS restrict stock: %s", msg.replace("\n", " | "))
             raise UserError(msg)
 
@@ -94,12 +102,19 @@ class PosOrder(models.Model):
     def create(self, vals_list):
         for vals in vals_list:
             session = self.env["pos.session"].browse(vals.get("session_id"))
-            config = session.config_id if session else self.env["pos.config"].browse(vals.get("config_id"))
+            config = (
+                session.config_id
+                if session
+                else self.env["pos.config"].browse(vals.get("config_id"))
+            )
             if config and getattr(config, "restrict_out_of_stock", False):
                 loc = self._pos_origin_location(config)
                 if loc:
                     req = self._extract_required_from_vals(vals)
-                    _logger.info("POS restrict stock: checking create() at '%s'", loc.display_name)
+                    _logger.info(
+                        "POS restrict stock: checking create() at '%s'",
+                        loc.display_name,
+                    )
                     self._check_required_map(req, loc, "creación")
         return super().create(vals_list)
 
@@ -108,39 +123,50 @@ class PosOrder(models.Model):
         for o in orders:
             data = o.get("data") or {}
             session = self.env["pos.session"].browse(data.get("pos_session_id"))
-            config = session.config_id if session else self.env["pos.config"].browse(data.get("config_id"))
+            config = (
+                session.config_id
+                if session
+                else self.env["pos.config"].browse(data.get("config_id"))
+            )
             if config and getattr(config, "restrict_out_of_stock", False):
                 loc = self._pos_origin_location(config)
                 if loc:
                     req = {}
                     for line in data.get("lines", []):
-                        vals = line[2] if isinstance(line, (list, tuple)) and len(line) > 2 else line
+                        vals = (
+                            line[2]
+                            if isinstance(line, (list, tuple)) and len(line) > 2
+                            else line
+                        )
                         if vals.get("pos_src_location_id"):
                             continue
                         qty = float(vals.get("qty") or 0.0)
                         pid = vals.get("product_id")
                         if qty > 0 and pid:
                             req[pid] = req.get(pid, 0.0) + qty
-                    _logger.info("POS restrict stock: checking create_from_ui at '%s'", loc.display_name)
+                    _logger.info(
+                        "POS restrict stock: checking create_from_ui at '%s'",
+                        loc.display_name,
+                    )
                     self._check_required_map(req, loc, "pre-creación")
         return super().create_from_ui(orders, draft=draft)
 
-    #   def action_pos_order_paid(self):
-    #     for order in self:
-    #         config = order.session_id.config_id
-    #         if config and getattr(config, "restrict_out_of_stock", False):
-    #             loc = self._pos_origin_location(config)
-    #             if loc:
-    #                 req = {}
-    #                 for l in order.lines:
-    #                     if l.qty > 0:
-    #                         req[l.product_id.id] = req.get(l.product_id.id, 0.0) + l.qty
-    #                 _logger.info(
-    #                     "POS restrict stock: checking action_pos_order_paid for POS '%s' at '%s'",
-    #                     config.display_name, loc.display_name
-    #                 )
-    #                 self._check_required_map(req, loc, "antes de pagar")
-    #     return super().action_pos_order_paid()
+    def action_pos_order_paid(self):
+        for order in self:
+            config = order.session_id.config_id
+            if config and getattr(config, "restrict_out_of_stock", False):
+                loc = self._pos_origin_location(config)
+                if loc:
+                    req = {}
+                    for l in order.lines:
+                        if l.qty > 0 and not l.pos_src_location_id:
+                            req[l.product_id.id] = req.get(l.product_id.id, 0.0) + l.qty
+                    _logger.info(
+                        "POS restrict stock: checking before pay at '%s'",
+                        loc.display_name,
+                    )
+                    self._check_required_map(req, loc, "antes de pagar")
+        return super().action_pos_order_paid()
 
     # ---------- creación de pickings por origen + bandera persistente ----------
     def _create_picking(self):
@@ -156,7 +182,10 @@ class PosOrder(models.Model):
         for order in self:
             picking_type = order.session_id.config_id.picking_type_id
             default_src = picking_type.default_location_src_id
-            dest = picking_type.default_location_dest_id or order.partner_id.property_stock_customer
+            dest = (
+                picking_type.default_location_dest_id
+                or order.partner_id.property_stock_customer
+            )
             if not dest:
                 dest = self.env.ref("stock.stock_location_customers")
 
@@ -177,14 +206,19 @@ class PosOrder(models.Model):
                 super(PosOrder, order.with_context(ctx_ok))._create_picking()
                 continue
 
-            _logger.info("POS picking: creando %s pickings por origen (cross-store OK)", len(groups))
+            _logger.info(
+                "POS picking: creando %s pickings por origen (cross-store OK)",
+                len(groups),
+            )
 
             created_pickings = self.env["stock.picking"]
             for key, bucket in groups.items():
                 src = bucket["src"]
                 lines = bucket["lines"]
 
-                vals_pick = order._prepare_picking_vals(order.partner_id, picking_type, src, dest)
+                vals_pick = order._prepare_picking_vals(
+                    order.partner_id, picking_type, src, dest
+                )
                 # bandera persistente en el picking
                 vals_pick["pos_src_cross_store_ok"] = True
                 picking = Picking.create(vals_pick)
@@ -225,4 +259,3 @@ class PosOrder(models.Model):
                 order.picking_ids |= created_pickings
 
         return True
-
